@@ -1,0 +1,158 @@
+creating django channels to allow for messaging within a website
+install django, and create a new app called chat
+channels are built on a python specification called ASGI(Asynchronous Server Gateway Interface)
+4 key steps to set up a connection and work with django 
+        a) configure ASGI- Switch django channels to use the asgi
+        b) create consumers which are the channel version of django views
+        c) create routing to handle the routing features for this consumers
+        d) websockets - use the builtin javascript websockets on the clientside to initiate the handshake and open a connection between the client and the server
+
+                  WORKING WITH CHANNELS
+1 install channels in the venv   ---- pip install channels
+                                 --- pip install -U 'channels[daphne]'
+2. add channels to the list of installed apps in the settings->installed Apps at the top
+                     INSTALLED_APPS =[
+                        'daphne',
+                        'channels',
+                     ]
+             Integrating channels
+1.creating a django channels configuration
+its an asgi application similar to a django configuration because it tells channels what code to run when an http request is recieved by  a channel server
+in the asgi.py ---->
+      from channels.routing import ProtocolTypeRouter
+    change th value of the application to user newly imported protocol type router and add http as the first value
+    django_asgi_app = get_asgi_application()
+    application = ProtocolTypeRouter({
+    "http": django_asgi_app,
+    })
+settings.py  ----->
+ point channels as the route configuration add
+    ASGI_APPLICATION = 'projectname.asgi.application'
+    runserver to ensure the channels are working as they should.. server should display the following
+     
+
+                  Starting ASGI/Daphne version 4.0.0 development server at http://127.0.0.1:8000/
+
+                                   THE CLIENT SIDE TO ESTABLISH A WEB SOCKET CONNECTION
+in the room.html ---->
+    add a script tag to allow for the writing of javascripts inside the html document
+    let url = `ws://${window.location.host}/ws/socket-server`
+    Putting it all together, the line constructs a WebSocket URL using the WebSocket protocol (ws://), the hostname and port number of the current web page (window.location.host), and the path to the WebSocket endpoint (/ws/socket-server). This URL can then be used to establish a WebSocket connection with the server at the specified endpoint.
+   { windows.location.host} - to dynamically get the hostname and port number of the current web page. window.location.host returns a string containing the hostname and port number (if specified) of the current URL.
+
+   /ws/socket-server: This is the path to the WebSocket endpoint on the server
+    <script type='text/javascript'> 
+       #to establish a web socket connection we need to find an endpoint to start the connection
+       let url = `ws://${windows.location.host}/ws/socket-server/`
+
+       #use the websocket object to create the chatsocket variable and pass in the url created before
+       const chatSocket = new webSocket(url)
+       #use the message event to listen to the messages from our server because we already have the chatSocket event. the below will fire off anytime a message is sent from the backend hence the function inside the function to handle the event when the user sends the message
+       chatSocket.onmessage = function(e){
+         let data = JSON.parse(e.data)
+         console.log('Data:', data)
+       }
+
+    </script>
+#after this section the socket connection is build up but there are not routes or consumers to handle this connections
+#when you open the consolce from the website there will be an error because there are no endpoints for this sockets to connect to . 
+
+in the chat app ----->
+ create a new file consumers.py   #the consumers are the chanels version of django but the consumers can do more functionalities that the views that is 1.respond to requests from the clientside
+                                        2. initiate requests from the clientside while keeping an open connection
+                                        3. Handling Asynchronous Requests
+    in the consumers.py ----->
+       import JSON
+       from channels.generic.websocket import WebSocketConsumer
+       #create a socketconsumer that inherits from the WebSocketConsumer
+       class ChatConsumer(WebSocketConsumer):
+       #it is responsible for getting messages from a user and broadcasting it to anyone who has a connection to the consumer in realtime
+       #consumer structure are coded in functions eg the 1.connect(self) method for the initial request from the client
+                                                         2. recieve(self, text_data) when we recieve messages from the client 
+                                                         3.disconnect(self,close_code) when a client disconnectss from the consumer
+            class ChatConsumer(WebSocketConsumer):
+               def connect(self):
+                 self.accept() #send a message to the client that the connection was made
+                 #recieve message from the client side and console it out to ensure that the connection was made
+                 self.send(text_data=json.dumps({
+                    'type': 'connection_established',
+                    'message': 'you are now connected' #to see the note in the frontend
+                 }))
+    to use this consumers you need to create a route thats in the app create a file routing.py 
+      in the routing.py ----->
+           from django.urls import re_path #used due to the limitations in url routings
+           #import the consumers and start setting up the url patterns list
+           from .import consumers
+           websocket_urlpatterns = [
+             re_path(r'ws/socket-server/', consumers.chatConsumer.asgi())
+           ]
+      in the asgi.py file ------->
+          import the url routing and the middleware stack
+          from channels.routing import ProtocolTypeRouter, URLRouter
+          from channels.auth import AuthMiddlewareStack
+          #import the routing.py file from the chat app
+          import chat.routing
+          #inside the protocol type router add the websocket and use the AuthMiddlewareStack method to wrap the URLRouter(). in the URLRouter pass the urls websocket patterns from the routing.py file  
+    after all this run the server and in the website console section check to see if the connection was successfull
+                            ADDING FUNCTIONALITIES TO THE websockets
+In the room.html add a form where the user will be passing the messages to the screen
+  room.html -------->
+       <form action="" id="form">
+            <input type="text" name="message">
+        </form>
+        the form has an id because there will be eventhandlers from the javascript that will be added later
+        inside the script tag , ----->
+          let form = document.getElementById('form')
+        #add an event handler to handle all the form submissions and using an arrowfunction and prevent the default behaviours in the forms. grab the value of the form messages and set it to the message variable
+          form.eventListener('submit', (e)=>{
+           e.preventDefault()
+           let message = e.target.message.value
+           #stringify the message and send it to the chat room using the send method from our websocket object which is stored inside the chatSocket Varible
+           chatSocket.send(JSON.stringify({
+            'message':message
+           }))
+           #once the message is sent reset the method using the reset method
+          form.reset()
+          })
+
+    consumers.py  ------->
+        #set the recieve method which will listen for messages from the client
+        #pass the data and then handle the response
+           def recieve(self, text_data):
+             text_data_json = json.loads(text_data)
+             message = text_data_json['message']#set the message variable to the data that was sent from the client
+
+             print('Message':, message) #test the recieve method by opening the message and the browser side by side
+             #the message entered by the user is displayed on the terminal at the same time
+#at this point the connection is only available for a client and a server. whenever a consumer recieves a message we want to broadcast the message to everybody that has a connection to the consumer
+     consumers.py ------>
+        def recieve(self, text_data):
+            ...
+            #add the send method inside the recieve to send a message back to the user whenever a message is recieved
+            #stringify the data and add the type as chat so that the information can be used in the frontend
+            self.send(text_data=json_dumps({
+                'type': 'chat',
+                'message': message #pass in the actual message from the user
+            }))
+          
+    room.html -------->
+         in the frontend jump to the messages function and handle the incoming messages from the server and first identify the message type 
+         if the data.type is equal to chat then query the wrapper and then create a wrapper in the html
+         chatSocket.onmessage = function(e) {
+            let data = JSON.parse(e.data)
+            console.log('Data:', data)
+             
+             #the section we are adding now 
+            if (data.type === 'chat') {    
+                let messages = document.getElementById('messages') #create an empty div in the html with the id messages that will be empty untill users start to add messages to the chats
+                #append the new message to the  beggining of the new wrapper 
+                messages.insertAdjacentElement('beforeend', `<div>
+                       <p> ${data.message} </p>         
+                    </div>`)
+                    #now the message is in a paragraph tag 
+
+
+            }
+        }
+
+       

@@ -31,13 +31,20 @@ ALLOWED_HOSTS = []
 # Application definition
 
 INSTALLED_APPS = [
+    'daphne',
+    'channels',
+
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'base',
+    'chat',
 ]
+# ASGI_APPLICATION = 'project3.asgi.application' 
+ASGI_APPLICATION = 'project3.asgi.application'
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
