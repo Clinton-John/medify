@@ -154,5 +154,5 @@ In the room.html add a form where the user will be passing the messages to the s
 
             }
         }
-
+#to this point a user can only see the messages he or she has contributed and an instance of the localhost when oppened doesnt know about each other. to solve this we are going to use the channel layers
        
